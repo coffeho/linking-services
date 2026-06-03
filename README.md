@@ -28,9 +28,39 @@
 python main.py
 ```
 
+## Системные зависимости
+
+Для Linux/WSL может понадобиться установить Tkinter отдельно:
+
+```bash
+sudo apt install -y python3-tk
+```
+
+Если виртуальное окружение не создаётся, также установите поддержку `venv`:
+
+```bash
+sudo apt install -y python3.12-venv
+```
+
 ## Тестовые аккаунты
 
 - `admin / admin`
 - `hr_manager / hr_manager`
 - `accountant / accountant`
 - `employee / employee`
+
+## Smoke-тесты
+
+Smoke-тесты фиксируют базовое поведение текущего монолита до рефакторинга.
+
+Установка зависимостей для разработки:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
+Запуск smoke-тестов:
+
+```bash
+python3 -m pytest tests/smoke -v
+```
