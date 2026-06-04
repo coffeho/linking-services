@@ -1,11 +1,9 @@
-
-import hashlib
 from tkinter import *
 from tkinter import ttk, messagebox
 from datetime import datetime
 import os
 
-# ======================== БАЗА ДАННЫХ ========================
+from packages.core.auth import authenticate_user, hash_password
 
 from packages.core.storage import Database
 
@@ -89,24 +87,20 @@ class HRSystemApp:
         if not login or not password:
             messagebox.showerror("Ошибка", "Заполните все поля!")
             return
-        
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
-        
-        self.db.cursor.execute('''
-            SELECT user_id, role, full_name, active FROM Users 
-            WHERE login = ? AND password = ?
-        ''', (login, hashed_password))
-        
-        user = self.db.cursor.fetchone()
+        # Проверка логина и пароля вынесена в core-модуль auth.py.
+        # GUI только передаёт введённые данные и показывает результат пользователю.
+        user = authenticate_user(self.db.cursor, login, password)
         
         if user:
-            if user[3] == 0:
+            if not user.active:
                 messagebox.showerror("Ошибка", "Аккаунт деактивирован!")
                 return
-            
-            self.current_user = user[0]
-            self.current_role = user[1]
-            self.current_user_name = user[2]
+
+            # auth.py возвращает объект AuthenticatedUser с понятными полями,
+            # поэтому main.py больше не работает с сырым tuple вида user[0], user[1].
+            self.current_user = user.user_id
+            self.current_role = user.role
+            self.current_user_name = user.full_name
             
             messagebox.showinfo("Успех", f"Добро пожаловать, {self.current_user_name}!")
             self.show_main_screen()
@@ -1958,8 +1952,10 @@ class HRSystemApp:
                     if not password:
                         messagebox.showerror("Ошибка", "Введите пароль!")
                         return
-                    
-                    hashed = hashlib.sha256(password.encode()).hexdigest()
+
+                    # Алгоритм хеширования пароля находится в core/auth.py,
+                    # чтобы GUI не зависел от деталей хранения паролей.
+                    hashed = hash_password(password)
                     self.db.cursor.execute('''
                         INSERT INTO Users (login, password, role, full_name)
                         VALUES (?, ?, ?, ?)
@@ -1967,7 +1963,9 @@ class HRSystemApp:
                 else:
                     user_id = item['values'][0]
                     if password:
-                        hashed = hashlib.sha256(password.encode()).hexdigest()
+                        # Используем общий helper из core/auth.py, чтобы создание и изменение
+                        # паролей работали одинаково.
+                        hashed = hash_password(password)
                         self.db.cursor.execute('''
                             UPDATE Users SET password=?, role=?, full_name=? WHERE user_id=?
                         ''', (hashed, role, full_name, user_id))
