@@ -1,4 +1,4 @@
-.PHONY: help setup run test smoke-test auth-test coverage docs build-lib install-lib-local clean
+.PHONY: help setup run test smoke-test auth-test coverage docs build-lib install-lib-local check clean
 
 PYTHON ?= python
 
@@ -14,6 +14,7 @@ help:
 	@echo "  make docs        - собрать проектную документацию"
 	@echo "  make build-lib   - собрать переиспользуемый core-пакет"
 	@echo "  make install-lib-local - установить пакет локально в editable-режиме"
+	@echo "  make check       - выполнить основную проверку проекта"
 
 setup:
 	./scripts/setup.sh
@@ -44,3 +45,4 @@ build-lib:
 
 install-lib-local:
 	./scripts/install-lib-local.sh
+check: test docs
