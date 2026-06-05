@@ -49,6 +49,15 @@ from packages.core.orders import (
     list_orders,
     list_positions_for_order,
 )
+
+from packages.core.reports import (
+    get_general_statistics,
+    get_salary_fund_by_department,
+    list_employee_experience,
+    list_employees_by_department,
+    list_positions_salary,
+    list_vacation_schedule,
+)
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
 class HRSystemApp:
@@ -1357,39 +1366,18 @@ class HRSystemApp:
         window.title("Общая статистика")
         window.geometry("600x500")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="📊 ОБЩАЯ СТАТИСТИКА", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="📊 ОБЩАЯ СТАТИСТИКА", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         text_frame = Frame(window, bg='white')
         text_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         text = Text(text_frame, font=("Arial", 11), wrap=WORD)
         text.pack(fill=BOTH, expand=True)
-        
-        # Общее количество сотрудников
-        self.db.cursor.execute("SELECT COUNT(*) FROM Employees WHERE status='Работает'")
-        total_emp = self.db.cursor.fetchone()[0]
-        
-        # Количество подразделений
-        self.db.cursor.execute("SELECT COUNT(*) FROM Departments")
-        total_dept = self.db.cursor.fetchone()[0]
-        
-        # Общий фонд зарплаты
-        self.db.cursor.execute("SELECT SUM(salary) FROM Employees WHERE status='Работает'")
-        total_salary = self.db.cursor.fetchone()[0] or 0
-        
-        # Средняя зарплата
-        self.db.cursor.execute("SELECT AVG(salary) FROM Employees WHERE status='Работает'")
-        avg_salary = self.db.cursor.fetchone()[0] or 0
-        
-        # Сотрудники в отпуске
-        self.db.cursor.execute("""
-            SELECT COUNT(DISTINCT employee_id) FROM Vacations 
-            WHERE date('now') BETWEEN start_date AND end_date
-        """)
-        on_vacation = self.db.cursor.fetchone()[0]
-        
+
+        stats = get_general_statistics(self.db.cursor)
+
         report = f"""
 ╔═══════════════════════════════════════════════════════╗
 ║             ОБЩАЯ СТАТИСТИКА ПРЕДПРИЯТИЯ              ║
@@ -1398,31 +1386,22 @@ class HRSystemApp:
 📊 ОСНОВНЫЕ ПОКАЗАТЕЛИ:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-👥 Общее количество сотрудников: {total_emp}
-🏢 Количество подразделений: {total_dept}
-🌴 Сотрудников в отпуске: {on_vacation}
+👥 Общее количество сотрудников: {stats["total_employees"]}
+🏢 Количество подразделений: {stats["total_departments"]}
+🌴 Сотрудников в отпуске: {stats["employees_on_vacation"]}
 
 💰 ФИНАНСОВЫЕ ПОКАЗАТЕЛИ:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💵 Общий фонд заработной платы: {total_salary:,.2f} руб.
-📊 Средняя зарплата: {avg_salary:,.2f} руб.
+💵 Общий фонд заработной платы: {stats["total_salary"]:,.2f} руб.
+📊 Средняя зарплата: {stats["average_salary"]:,.2f} руб.
 
 📋 РАСПРЕДЕЛЕНИЕ ПО ПОДРАЗДЕЛЕНИЯМ:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-        
-        self.db.cursor.execute('''
-            SELECT d.department_name, COUNT(e.employee_id) as cnt
-            FROM Departments d
-            LEFT JOIN Employees e ON d.department_id = e.department_id AND e.status='Работает'
-            GROUP BY d.department_id
-            ORDER BY cnt DESC
-        ''')
-        
-        for dept, cnt in self.db.cursor.fetchall():
+        for dept, cnt in stats["department_distribution"]:
             report += f"\n🏢 {dept}: {cnt} чел."
-        
+
         text.insert('1.0', report)
         text.config(state=DISABLED)
     
@@ -1431,36 +1410,24 @@ class HRSystemApp:
         window.title("Сотрудники по подразделениям")
         window.geometry("900x600")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="👥 СОТРУДНИКИ ПО ПОДРАЗДЕЛЕНИЯМ", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="👥 СОТРУДНИКИ ПО ПОДРАЗДЕЛЕНИЯМ", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         table_frame = Frame(window)
         table_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         columns = ('Подразделение', 'ФИО', 'Должность', 'Зарплата')
-        
+
         tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=200)
-        
+
         tree.pack(fill=BOTH, expand=True)
-        
-        self.db.cursor.execute('''
-            SELECT d.department_name,
-                   e.last_name || ' ' || e.first_name || ' ' || e.middle_name,
-                   p.position_name,
-                   e.salary
-            FROM Employees e
-            JOIN Departments d ON e.department_id = d.department_id
-            JOIN Positions p ON e.position_id = p.position_id
-            WHERE e.status='Работает'
-            ORDER BY d.department_name, e.last_name
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_employees_by_department(self.db.cursor):
             tree.insert('', END, values=row)
     
     def report_salary(self):
@@ -1468,123 +1435,85 @@ class HRSystemApp:
         window.title("Зарплатный фонд")
         window.geometry("700x500")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="💰 ЗАРПЛАТНЫЙ ФОНД", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="💰 ЗАРПЛАТНЫЙ ФОНД", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         table_frame = Frame(window)
         table_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         columns = ('Подразделение', 'Количество', 'Мин. зарплата', 'Макс. зарплата', 'Средняя', 'Общий фонд')
-        
+
         tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=100)
-        
+
         tree.pack(fill=BOTH, expand=True)
-        
-        self.db.cursor.execute('''
-            SELECT d.department_name,
-                   COUNT(e.employee_id),
-                   MIN(e.salary),
-                   MAX(e.salary),
-                   AVG(e.salary),
-                   SUM(e.salary)
-            FROM Departments d
-            LEFT JOIN Employees e ON d.department_id = e.department_id AND e.status='Работает'
-            GROUP BY d.department_id
-        ''')
-        
+
         total = 0
-        for row in self.db.cursor.fetchall():
+
+        for row in get_salary_fund_by_department(self.db.cursor):
             tree.insert('', END, values=(
-                row[0], row[1],
+                row[0],
+                row[1],
                 f"{row[2]:,.0f}" if row[2] else "0",
                 f"{row[3]:,.0f}" if row[3] else "0",
                 f"{row[4]:,.0f}" if row[4] else "0",
-                f"{row[5]:,.0f}" if row[5] else "0"
+                f"{row[5]:,.0f}" if row[5] else "0",
             ))
             total += row[5] if row[5] else 0
-        
-        Label(window, text=f"💵 ИТОГО ФОНД ЗАРАБОТНОЙ ПЛАТЫ: {total:,.2f} руб.", 
-              font=("Arial", 14, "bold"), bg='#ecf0f1', fg='#27ae60').pack(pady=10)
-    
+
+        Label(window, text=f"💵 ИТОГО ФОНД ЗАРАБОТНОЙ ПЛАТЫ: {total:,.2f} руб.",
+            font=("Arial", 14, "bold"), bg='#ecf0f1', fg='#27ae60').pack(pady=10)
     def report_vacations(self):
         window = Toplevel(self.root)
         window.title("График отпусков")
         window.geometry("900x600")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="🌴 ГРАФИК ОТПУСКОВ", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="🌴 ГРАФИК ОТПУСКОВ", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         table_frame = Frame(window)
         table_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         columns = ('ФИО', 'Подразделение', 'Начало', 'Окончание', 'Дней', 'Тип')
-        
+
         tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=140)
-        
+
         tree.pack(fill=BOTH, expand=True)
-        
-        self.db.cursor.execute('''
-            SELECT e.last_name || ' ' || e.first_name,
-                   d.department_name,
-                   v.start_date,
-                   v.end_date,
-                   CAST((julianday(v.end_date) - julianday(v.start_date)) AS INTEGER),
-                   v.vacation_type
-            FROM Vacations v
-            JOIN Employees e ON v.employee_id = e.employee_id
-            JOIN Departments d ON e.department_id = d.department_id
-            ORDER BY v.start_date DESC
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_vacation_schedule(self.db.cursor):
             tree.insert('', END, values=row)
-    
     def report_experience(self):
         window = Toplevel(self.root)
         window.title("Сотрудники по стажу")
         window.geometry("900x600")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="📅 СОТРУДНИКИ ПО СТАЖУ РАБОТЫ", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="📅 СОТРУДНИКИ ПО СТАЖУ РАБОТЫ", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         table_frame = Frame(window)
         table_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         columns = ('ФИО', 'Подразделение', 'Должность', 'Дата приёма', 'Стаж (лет)')
-        
+
         tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=170)
-        
+
         tree.pack(fill=BOTH, expand=True)
-        
-        self.db.cursor.execute('''
-            SELECT e.last_name || ' ' || e.first_name || ' ' || e.middle_name,
-                   d.department_name,
-                   p.position_name,
-                   e.hire_date,
-                   CAST((julianday('now') - julianday(e.hire_date)) / 365.25 AS INTEGER)
-            FROM Employees e
-            JOIN Departments d ON e.department_id = d.department_id
-            JOIN Positions p ON e.position_id = p.position_id
-            WHERE e.status='Работает'
-            ORDER BY e.hire_date
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_employee_experience(self.db.cursor):
             tree.insert('', END, values=row)
     
     def report_positions_salary(self):
@@ -1592,43 +1521,32 @@ class HRSystemApp:
         window.title("Должности и зарплаты")
         window.geometry("700x500")
         window.configure(bg='#ecf0f1')
-        
-        Label(window, text="💼 ДОЛЖНОСТИ И ЗАРПЛАТЫ", font=("Arial", 16, "bold"), 
-              bg='#ecf0f1').pack(pady=10)
-        
+
+        Label(window, text="💼 ДОЛЖНОСТИ И ЗАРПЛАТЫ", font=("Arial", 16, "bold"),
+            bg='#ecf0f1').pack(pady=10)
+
         table_frame = Frame(window)
         table_frame.pack(fill=BOTH, expand=True, padx=20, pady=10)
-        
+
         columns = ('Должность', 'Количество', 'Мин. зарплата', 'Макс. зарплата', 'Средняя зарплата')
-        
+
         tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-        
+
         for col in columns:
             tree.heading(col, text=col)
             tree.column(col, width=130)
-        
+
         tree.pack(fill=BOTH, expand=True)
-        
-        self.db.cursor.execute('''
-            SELECT p.position_name,
-                   COUNT(e.employee_id),
-                   MIN(e.salary),
-                   MAX(e.salary),
-                   AVG(e.salary)
-            FROM Positions p
-            LEFT JOIN Employees e ON p.position_id = e.position_id AND e.status='Работает'
-            GROUP BY p.position_id
-            ORDER BY COUNT(e.employee_id) DESC
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_positions_salary(self.db.cursor):
             tree.insert('', END, values=(
-                row[0], row[1],
+                row[0],
+                row[1],
                 f"{row[2]:,.0f}" if row[2] else "0",
                 f"{row[3]:,.0f}" if row[3] else "0",
-                f"{row[4]:,.0f}" if row[4] else "0"
+                f"{row[4]:,.0f}" if row[4] else "0",
             ))
-    
+        
     # ==================== ПОЛЬЗОВАТЕЛИ ====================
     
     def show_users(self):
