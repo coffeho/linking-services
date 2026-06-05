@@ -1,4 +1,4 @@
-.PHONY: help setup run test smoke-test auth-test coverage clean
+.PHONY: help setup run test smoke-test auth-test coverage docs clean
 
 PYTHON ?= python
 
@@ -11,6 +11,7 @@ help:
 	@echo "  make auth-test   - запустить unit-тесты авторизации"
 	@echo "  make coverage    - запустить тесты с отчётом покрытия"
 	@echo "  make clean       - удалить временные файлы"
+	@echo "  make docs        - собрать проектную документацию"
 
 setup:
 	./scripts/setup.sh
@@ -34,3 +35,5 @@ clean:
 	rm -rf .pytest_cache htmlcov .coverage
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+docs:
+	./scripts/build-docs.sh
