@@ -1,4 +1,4 @@
-.PHONY: help setup run test smoke-test auth-test coverage docs clean
+.PHONY: help setup run test smoke-test auth-test coverage docs build-lib install-lib-local clean
 
 PYTHON ?= python
 
@@ -12,6 +12,8 @@ help:
 	@echo "  make coverage    - запустить тесты с отчётом покрытия"
 	@echo "  make clean       - удалить временные файлы"
 	@echo "  make docs        - собрать проектную документацию"
+	@echo "  make build-lib   - собрать переиспользуемый core-пакет"
+	@echo "  make install-lib-local - установить пакет локально в editable-режиме"
 
 setup:
 	./scripts/setup.sh
@@ -37,3 +39,8 @@ clean:
 	find . -type f -name "*.pyc" -delete
 docs:
 	./scripts/build-docs.sh
+build-lib:
+	./scripts/build-lib.sh
+
+install-lib-local:
+	./scripts/install-lib-local.sh

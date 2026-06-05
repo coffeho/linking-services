@@ -30,3 +30,8 @@ dist/
 
 # Documentation build
 site/
+
+# Python package build
+dist/
+build/
+*.egg-info/
