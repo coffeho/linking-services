@@ -321,6 +321,23 @@ Unit-тесты проверяют переиспользуемые core-мод�
 ```bash
 python -m pytest tests/unit/test_auth.py -v
 ```
+## Integration-тесты
+
+Integration-тесты проверяют совместную работу нескольких core-модулей и временной SQLite-базы.
+
+На текущем этапе integration-тест проверяет сценарий увольнения через кадровый приказ:
+
+- создаётся временная SQLite-база;
+- создаётся приказ на увольнение;
+- приказ исполняется;
+- статус сотрудника меняется на `Уволен`;
+- статус приказа меняется на `Исполнен`.
+
+Запуск:
+
+```bash
+make integration-test
+
 
 ## Документация
 
@@ -408,6 +425,9 @@ build/
 │       └── vacations.py
 ├── tests/
 │   ├── smoke/
+    ├── unit/
+    └── integration/
+        └── test_hr_workflow.py
 │   │
 └── test_database_baseline.py
 │   └── unit/
