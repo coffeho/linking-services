@@ -7,6 +7,10 @@ from packages.core.auth import authenticate_user, hash_password
 
 from packages.core.storage import Database
 
+
+from packages.core.employees import delete_employee as core_delete_employee
+from packages.core.employees import list_employees 
+
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
 class HRSystemApp:
@@ -225,24 +229,12 @@ class HRSystemApp:
     def load_employees(self, search_text=''):
         for item in self.employees_tree.get_children():
             self.employees_tree.delete(item)
-        
-        query = '''
-            SELECT e.employee_id, e.last_name, e.first_name, e.middle_name, 
-                   e.birth_date, e.hire_date, d.department_name, p.position_name,
-                   e.salary, e.status
-            FROM Employees e
-            LEFT JOIN Departments d ON e.department_id = d.department_id
-            LEFT JOIN Positions p ON e.position_id = p.position_id
-        '''
-        
-        if search_text:
-            query += f" WHERE e.last_name LIKE '%{search_text}%' OR e.first_name LIKE '%{search_text}%'"
-        
-        self.db.cursor.execute(query)
-        
-        for row in self.db.cursor.fetchall():
+
+        rows = list_employees(self.db.cursor, search_text)
+
+        for row in rows:
             self.employees_tree.insert('', END, values=row)
-    
+        
     def search_employees(self):
         self.load_employees(self.search_employee_var.get())
     
@@ -266,8 +258,7 @@ class HRSystemApp:
             item = self.employees_tree.item(selected[0])
             employee_id = item['values'][0]
             
-            self.db.cursor.execute("DELETE FROM Employees WHERE employee_id = ?", (employee_id,))
-            self.db.conn.commit()
+            core_delete_employee(self.db.cursor, self.db.conn, employee_id)
             
             messagebox.showinfo("Успех", "Сотрудник удалён!")
             self.show_employees()
