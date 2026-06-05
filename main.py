@@ -31,13 +31,23 @@ from packages.core.vacations import (
     save_vacation,
 )
 
-
 from packages.core.transfers import (
     create_transfer,
     delete_transfer as core_delete_transfer,
     list_departments_for_transfer,
     list_transfers,
     list_working_employees_with_department,
+)
+
+from packages.core.orders import (
+    create_or_update_order,
+    delete_order as core_delete_order,
+    execute_order as core_execute_order,
+    get_order_data,
+    list_departments_for_order,
+    list_employees_for_order,
+    list_orders,
+    list_positions_for_order,
 )
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
@@ -868,25 +878,14 @@ class HRSystemApp:
     def load_orders(self):
         for item in self.orders_tree.get_children():
             self.orders_tree.delete(item)
-    
-        self.db.cursor.execute('''
-            SELECT o.order_id, o.order_type, o.order_date,
-                   e.last_name || ' ' || e.first_name as full_name,
-                   o.description, o.status
-            FROM Orders o
-            LEFT JOIN Employees e ON o.employee_id = e.employee_id
-            ORDER BY o.order_date DESC, o.order_id DESC
-        ''')
-    
-        for row in self.db.cursor.fetchall():
-            # Раскрашиваем строки в зависимости от статуса
+
+        for row in list_orders(self.db.cursor):
             item_id = self.orders_tree.insert('', END, values=row)
             if row[5] == 'Исполнен':
                 self.orders_tree.item(item_id, tags=('executed',))
             elif row[5] == 'Отменён':
                 self.orders_tree.item(item_id, tags=('cancelled',))
-    
-        # Настройка цветов
+
         self.orders_tree.tag_configure('executed', background='#d5f4e6')
         self.orders_tree.tag_configure('cancelled', background='#fadbd8')
 
@@ -911,189 +910,55 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите приказ!")
             return
-    
+
         item = self.orders_tree.item(selected[0])
-        if item['values'][5] == 'Исполнен':
-            messagebox.showerror("Ошибка", "Нельзя удалить исполненный приказ!")
-            return
-    
+        order_id = item['values'][0]
+        status = item['values'][5]
+
         if messagebox.askyesno("Подтверждение", "Удалить выбранный приказ?"):
-            order_id = item['values'][0]
-        
-            self.db.cursor.execute("DELETE FROM Orders WHERE order_id = ?", (order_id,))
-            self.db.conn.commit()
-        
-            messagebox.showinfo("Успех", "Приказ удалён!")
-            self.show_orders()
+            ok, msg = core_delete_order(self.db.cursor, self.db.conn, order_id, status)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
+                self.show_orders()
+            else:
+                messagebox.showerror("Ошибка", msg)
 
     def execute_order(self):
-        """Исполнение приказа с автоматическим применением изменений"""
         selected = self.orders_tree.selection()
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите приказ для исполнения!")
             return
-    
+
         item = self.orders_tree.item(selected[0])
         values = item['values']
-    
+
         if values[5] == 'Исполнен':
             messagebox.showinfo("Информация", "Приказ уже исполнен!")
             return
-    
+
         order_id = values[0]
         order_type = values[1]
-    
-        if not messagebox.askyesno("Подтверждение", 
-                                   f"Исполнить приказ типа '{order_type}'?\n\nЭто действие изменит данные в системе."):
+
+        if not messagebox.askyesno(
+            "Подтверждение",
+            f"Исполнить приказ типа '{order_type}'?\n\nЭто действие изменит данные в системе.",
+        ):
             return
-    
+
         try:
-            # Получаем полные данные приказа
-            self.db.cursor.execute('''
-                SELECT order_type, employee_id, description, order_date, order_data
-                FROM Orders WHERE order_id = ?
-            ''', (order_id,))
-        
-            order = self.db.cursor.fetchone()
-            order_type, employee_id, description, order_date, order_data = order
-        
-            # Исполняем приказ в зависимости от типа
-            if order_type == 'Прием на работу':
-                self._execute_hire_order(employee_id, order_data, order_date)
-        
-            elif order_type == 'Увольнение':
-                self._execute_dismissal_order(employee_id, order_date)
-        
-            elif order_type == 'Перевод':
-                self._execute_transfer_order(employee_id, order_data, order_date)
-        
-            elif order_type == 'Отпуск':
-                self._execute_vacation_order(employee_id, order_data, order_date)
-        
-            elif order_type == 'Изменение оклада':
-                self._execute_salary_change_order(employee_id, order_data)
-        
-            elif order_type == 'Премия':
-                self._execute_bonus_order(employee_id, order_data)
-        
-            elif order_type == 'Взыскание':
-                # Просто меняем статус (взыскания можно хранить отдельно)
-                pass
-        
-            # Обновляем статус приказа
-            self.db.cursor.execute('''
-                UPDATE Orders SET status = 'Исполнен' WHERE order_id = ?
-            ''', (order_id,))
-        
-            self.db.conn.commit()
-            messagebox.showinfo("Успех", f"Приказ '{order_type}' успешно исполнен!")
-            self.show_orders()
-        
+            ok, msg = core_execute_order(self.db.cursor, self.db.conn, order_id)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
+                self.show_orders()
+            else:
+                messagebox.showerror("Ошибка", msg)
+
         except Exception as e:
             self.db.conn.rollback()
             messagebox.showerror("Ошибка", f"Не удалось исполнить приказ:\n{str(e)}")
 
-    def _execute_hire_order(self, employee_id, order_data, order_date):
-        """Приём на работу - активация сотрудника"""
-        if employee_id:
-            self.db.cursor.execute('''
-                UPDATE Employees SET status = 'Работает', hire_date = ?
-                WHERE employee_id = ?
-            ''', (order_date, employee_id))
-
-    def _execute_dismissal_order(self, employee_id, order_date):
-        """Увольнение сотрудника"""
-        self.db.cursor.execute('''
-            UPDATE Employees SET status = 'Уволен'
-            WHERE employee_id = ?
-        ''', (employee_id,))
-    
-        # Отменяем все будущие отпуска
-        self.db.cursor.execute('''
-            DELETE FROM Vacations 
-            WHERE employee_id = ? AND start_date > date('now')
-        ''', (employee_id,))
-
-    def _execute_transfer_order(self, employee_id, order_data, order_date):
-        """Перевод в другое подразделение"""
-        import json
-        data = json.loads(order_data) if order_data else {}
-    
-        new_dept_id = data.get('new_department_id')
-        new_pos_id = data.get('new_position_id')
-    
-        # Получаем текущее подразделение
-        self.db.cursor.execute('''
-            SELECT department_id FROM Employees WHERE employee_id = ?
-        ''', (employee_id,))
-        old_dept_id = self.db.cursor.fetchone()[0]
-    
-        # Добавляем запись о переводе
-        self.db.cursor.execute('''
-            INSERT INTO Transfers (employee_id, old_department_id, new_department_id, transfer_date)
-            VALUES (?, ?, ?, ?)
-        ''', (employee_id, old_dept_id, new_dept_id, order_date))
-    
-        # Обновляем данные сотрудника
-        if new_pos_id:
-            self.db.cursor.execute('''
-                UPDATE Employees 
-                SET department_id = ?, position_id = ?
-                WHERE employee_id = ?
-            ''', (new_dept_id, new_pos_id, employee_id))
-        else:
-            self.db.cursor.execute('''
-                UPDATE Employees 
-                SET department_id = ?
-                WHERE employee_id = ?
-            ''', (new_dept_id, employee_id))
-
-    def _execute_vacation_order(self, employee_id, order_data, order_date):
-        """Отправка в отпуск"""
-        import json
-        data = json.loads(order_data) if order_data else {}
-    
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
-        vacation_type = data.get('vacation_type', 'Ежегодный оплачиваемый')
-    
-        # Добавляем отпуск
-        self.db.cursor.execute('''
-            INSERT INTO Vacations (employee_id, start_date, end_date, vacation_type)
-            VALUES (?, ?, ?, ?)
-        ''', (employee_id, start_date, end_date, vacation_type))
-    
-        # Обновляем статус сотрудника, если отпуск начался
-        from datetime import datetime
-        if start_date <= datetime.now().strftime('%Y-%m-%d') <= end_date:
-            self.db.cursor.execute('''
-                UPDATE Employees SET status = 'В отпуске'
-                WHERE employee_id = ?
-            ''', (employee_id,))
-
-    def _execute_salary_change_order(self, employee_id, order_data):
-        """Изменение оклада"""
-        import json
-        data = json.loads(order_data) if order_data else {}
-    
-        new_salary = data.get('new_salary')
-    
-        if new_salary:
-            self.db.cursor.execute('''
-                UPDATE Employees SET salary = ?
-                WHERE employee_id = ?
-            ''', (new_salary, employee_id))
-
-    def _execute_bonus_order(self, employee_id, order_data):
-        """Премия (можно добавить таблицу премий или увеличить зарплату)"""
-        import json
-        data = json.loads(order_data) if order_data else {}
-    
-        bonus_amount = data.get('bonus_amount', 0)
-    
-        # Здесь можно добавить таблицу Bonuses или временно увеличить зарплату
-        # Для простоты просто зафиксируем в описании
-        pass
 
     def order_window(self, mode):
         window = Toplevel(self.root)
@@ -1130,12 +995,8 @@ class HRSystemApp:
         emp_var = StringVar()
         emp_combo = ttk.Combobox(form_frame, textvariable=emp_var, font=("Arial", 11), width=35)
     
-        self.db.cursor.execute('''
-            SELECT employee_id, last_name || ' ' || first_name || ' ' || middle_name 
-            FROM Employees
-            ORDER BY last_name
-        ''')
-        employees = self.db.cursor.fetchall()
+        employees = list_employees_for_order(self.db.cursor) #!
+
         emp_combo['values'] = [f"{e[0]} - {e[1]}" for e in employees]
         emp_combo.grid(row=2, column=1, pady=10)
     
@@ -1166,8 +1027,9 @@ class HRSystemApp:
                 dept_var = StringVar()
                 dept_combo = ttk.Combobox(dynamic_frame, textvariable=dept_var, 
                                          font=("Arial", 11), width=35)
-                self.db.cursor.execute("SELECT department_id, department_name FROM Departments")
-                depts = self.db.cursor.fetchall()
+                
+                depts = list_departments_for_order(self.db.cursor)#!
+
                 dept_combo['values'] = [f"{d[0]} - {d[1]}" for d in depts]
                 dept_combo.grid(row=row, column=1, pady=5)
                 dynamic_widgets['new_department'] = dept_var
@@ -1178,8 +1040,9 @@ class HRSystemApp:
                 pos_var = StringVar()
                 pos_combo = ttk.Combobox(dynamic_frame, textvariable=pos_var, 
                                         font=("Arial", 11), width=35)
-                self.db.cursor.execute("SELECT position_id, position_name FROM Positions")
-                positions = self.db.cursor.fetchall()
+                
+                positions = list_positions_for_order(self.db.cursor)#!
+
                 pos_combo['values'] = [f"{p[0]} - {p[1]}" for p in positions]
                 pos_combo.grid(row=row, column=1, pady=5)
                 dynamic_widgets['new_position'] = pos_var
@@ -1243,8 +1106,8 @@ class HRSystemApp:
         
             # Загружаем дополнительные данные
             order_id = values[0]
-            self.db.cursor.execute('SELECT order_data FROM Orders WHERE order_id = ?', (order_id,))
-            order_data = self.db.cursor.fetchone()[0]
+
+            order_data = get_order_data(self.db.cursor, order_id)
         
             update_fields()
         
@@ -1274,7 +1137,6 @@ class HRSystemApp:
                 description = desc_text.get('1.0', END).strip()
             
                 # Собираем дополнительные данные
-                import json
                 order_data = {}
             
                 if order_type == 'Перевод':
@@ -1307,25 +1169,27 @@ class HRSystemApp:
                         if bonus_str:
                             order_data['bonus_amount'] = float(bonus_str)
             
-                order_data_json = json.dumps(order_data, ensure_ascii=False)
-            
-                if mode == 'add':
-                    self.db.cursor.execute('''
-                        INSERT INTO Orders (order_type, order_date, employee_id, description, order_data, status)
-                        VALUES (?, ?, ?, ?, ?, 'Не исполнен')
-                    ''', (order_type, order_date, emp_id, description, order_data_json))
-                else:
+                order_id = None
+                if mode == 'edit':
                     order_id = item['values'][0]
-                    self.db.cursor.execute('''
-                        UPDATE Orders SET order_type=?, order_date=?, employee_id=?, 
-                        description=?, order_data=?
-                        WHERE order_id=?
-                    ''', (order_type, order_date, emp_id, description, order_data_json, order_id))
-            
-                self.db.conn.commit()
-                messagebox.showinfo("Успех", "Приказ сохранён!")
-                window.destroy()
-                self.show_orders()
+
+                ok, msg = create_or_update_order(
+                    self.db.cursor,
+                    self.db.conn,
+                    order_type,
+                    order_date,
+                    emp_id,
+                    description,
+                    order_data,
+                    order_id,
+                )
+
+                if ok:
+                    messagebox.showinfo("Успех", msg)
+                    window.destroy()
+                    self.show_orders()
+                else:
+                    messagebox.showerror("Ошибка", msg)
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить приказ:\n{str(e)}")
     
