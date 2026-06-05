@@ -38,6 +38,7 @@
 - `packages/core/reports.py` — операции формирования отчетов;
 - `tests/smoke/` — smoke-тесты базового поведения исходного монолита;
 - `tests/unit/` — unit-тесты core-модулей;
+- `tests/integration/` — integration-тесты кадровых сценариев;
 - `Makefile` и `scripts/` — единые команды для запуска и проверки проекта;
 - `docs/` — проектная документация;
 - `mkdocs.yml` — конфигурация сборки документации через MkDocs;
@@ -160,13 +161,14 @@ make smoke-test
 ```bash
 make auth-test
 ```
+
 Запускает unit-тесты авторизации.
 
 ```bash
 make integration-test
 ```
-Запускает integration-тесты.
 
+Запускает integration-тесты.
 
 ```bash
 make coverage
@@ -321,6 +323,7 @@ Unit-тесты проверяют переиспользуемые core-мод�
 ```bash
 python -m pytest tests/unit/test_auth.py -v
 ```
+
 ## Integration-тесты
 
 Integration-тесты проверяют совместную работу нескольких core-модулей и временной SQLite-базы.
@@ -337,7 +340,7 @@ Integration-тесты проверяют совместную работу не
 
 ```bash
 make integration-test
-
+```
 
 ## Документация
 
@@ -425,20 +428,18 @@ build/
 │       └── vacations.py
 ├── tests/
 │   ├── smoke/
-    ├── unit/
-    └── integration/
-        └── test_hr_workflow.py
-│   │
-└── test_database_baseline.py
-│   └── unit/
-│       ├── test_auth.py
-│       ├── test_departments_positions.py
-│       ├── test_employees.py
-│       ├── test_models.py
-│       ├── test_orders.py
-│       ├── test_reports.py
-│       ├── test_transfers.py
-│       └── test_vacations.py
+│   │   └── test_database_baseline.py
+│   ├── unit/
+│   │   ├── test_auth.py
+│   │   ├── test_departments_positions.py
+│   │   ├── test_employees.py
+│   │   ├── test_models.py
+│   │   ├── test_orders.py
+│   │   ├── test_reports.py
+│   │   ├── test_transfers.py
+│   │   └── test_vacations.py
+│   └── integration/
+│       └── test_hr_workflow.py
 ├── docs/
 │   ├── index.md
 │   ├── specification.md
@@ -505,6 +506,7 @@ build/
 22. Добавлена пакетизация core-компонента через `pyproject.toml`.
 23. Добавлена контейнерная проверка проекта.
 24. Добавлены диаграммы проекта в редактируемом формате Mermaid.
+25. Добавлен integration-тест сценария увольнения через кадровый приказ.
 
 ## Ограничения текущей версии
 
@@ -515,12 +517,8 @@ build/
 - Tkinter-интерфейс уже вынесен в `app/ui/main_window.py`, но отдельные формы пока не разделены по файлам;
 - `main.py` оставлен как совместимая обертка для старого запуска и smoke-тестов;
 - `packages/core` содержит основную переиспользуемую логику, но слой хранения `storage.py` пока находится внутри core;
-- контейнер используется для проверки тестов и документации, а не для запуска GUI;
-- integration-тесты пока не добавлены.
+- контейнер используется для проверки тестов и документации, а не для запуска GUI.
 
 Дальнейшие шаги:
 
 - разделить Tkinter-формы по файлам внутри `app/ui`;
-- добавить integration-тесты;
-- при необходимости вынести SQLite-слой из `packages/core/storage.py` в отдельный адаптер;
-- расширить контейнерное окружение при появлении внешней инфраструктуры.
