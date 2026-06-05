@@ -7,22 +7,6 @@ from packages.core.auth import authenticate_user, hash_password
 
 from packages.core.storage import Database
 
-
-from packages.core.employees import delete_employee as core_delete_employee
-
-from packages.core.employees import list_employees
-
-
-from packages.core.departments import (
-    delete_department as core_delete_department,
-    list_departments,
-    save_department,
-)
-from packages.core.positions import (
-    delete_position as core_delete_position,
-    list_positions,
-    save_position,
-)
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
 class HRSystemApp:
@@ -241,10 +225,22 @@ class HRSystemApp:
     def load_employees(self, search_text=''):
         for item in self.employees_tree.get_children():
             self.employees_tree.delete(item)
-
-        rows = list_employees(self.db.cursor, search_text)
-
-        for row in rows:
+        
+        query = '''
+            SELECT e.employee_id, e.last_name, e.first_name, e.middle_name, 
+                   e.birth_date, e.hire_date, d.department_name, p.position_name,
+                   e.salary, e.status
+            FROM Employees e
+            LEFT JOIN Departments d ON e.department_id = d.department_id
+            LEFT JOIN Positions p ON e.position_id = p.position_id
+        '''
+        
+        if search_text:
+            query += f" WHERE e.last_name LIKE '%{search_text}%' OR e.first_name LIKE '%{search_text}%'"
+        
+        self.db.cursor.execute(query)
+        
+        for row in self.db.cursor.fetchall():
             self.employees_tree.insert('', END, values=row)
     
     def search_employees(self):
@@ -270,7 +266,8 @@ class HRSystemApp:
             item = self.employees_tree.item(selected[0])
             employee_id = item['values'][0]
             
-            core_delete_employee(self.db.cursor, self.db.conn, employee_id)
+            self.db.cursor.execute("DELETE FROM Employees WHERE employee_id = ?", (employee_id,))
+            self.db.conn.commit()
             
             messagebox.showinfo("Успех", "Сотрудник удалён!")
             self.show_employees()
@@ -439,10 +436,16 @@ class HRSystemApp:
     def load_departments(self):
         for item in self.departments_tree.get_children():
             self.departments_tree.delete(item)
-
-        rows = list_departments(self.db.cursor)
-
-        for row in rows:
+        
+        self.db.cursor.execute('''
+            SELECT d.department_id, d.department_name, d.manager_id,
+                   COUNT(e.employee_id) as emp_count
+            FROM Departments d
+            LEFT JOIN Employees e ON d.department_id = e.department_id
+            GROUP BY d.department_id
+        ''')
+        
+        for row in self.db.cursor.fetchall():
             self.departments_tree.insert('', END, values=row)
     
     def add_department(self):
@@ -460,18 +463,22 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите подразделение!")
             return
-
+        
         if messagebox.askyesno("Подтверждение", "Удалить выбранное подразделение?"):
             item = self.departments_tree.item(selected[0])
             dept_id = item['values'][0]
-
-            ok, msg = core_delete_department(self.db.cursor, self.db.conn, dept_id)
-
-            if ok:
-                messagebox.showinfo("Успех", msg)
-                self.show_departments()
-            else:
-                messagebox.showerror("Ошибка", msg)
+            
+            # Проверка наличия сотрудников
+            self.db.cursor.execute("SELECT COUNT(*) FROM Employees WHERE department_id = ?", (dept_id,))
+            if self.db.cursor.fetchone()[0] > 0:
+                messagebox.showerror("Ошибка", "В подразделении есть сотрудники!")
+                return
+            
+            self.db.cursor.execute("DELETE FROM Departments WHERE department_id = ?", (dept_id,))
+            self.db.conn.commit()
+            
+            messagebox.showinfo("Успех", "Подразделение удалено!")
+            self.show_departments()
     
     def department_window(self, mode):
         window = Toplevel(self.root)
@@ -497,22 +504,27 @@ class HRSystemApp:
         
         def save():
             name = name_entry.get()
-
-            dept_id = None
-            if mode == 'edit':
-                dept_id = item['values'][0]
-
-            ok, msg = save_department(self.db.cursor, self.db.conn, name, dept_id)
-
-            if ok:
-                messagebox.showinfo("Успех", msg)
+            if not name:
+                messagebox.showerror("Ошибка", "Введите название!")
+                return
+            
+            try:
+                if mode == 'add':
+                    self.db.cursor.execute("INSERT INTO Departments (department_name) VALUES (?)", (name,))
+                else:
+                    dept_id = item['values'][0]
+                    self.db.cursor.execute("UPDATE Departments SET department_name=? WHERE department_id=?", 
+                                         (name, dept_id))
+                
+                self.db.conn.commit()
+                messagebox.showinfo("Успех", "Данные сохранены!")
                 window.destroy()
                 self.show_departments()
-            else:
-                messagebox.showerror("Ошибка", msg)
-                
-                Button(window, text="💾 СОХРАНИТЬ", command=save, bg='#27ae60', 
-                    fg='white', font=("Arial", 12, "bold"), width=15).pack(pady=20)
+            except Exception as e:
+                messagebox.showerror("Ошибка", str(e))
+        
+        Button(window, text="💾 СОХРАНИТЬ", command=save, bg='#27ae60', 
+               fg='white', font=("Arial", 12, "bold"), width=15).pack(pady=20)
     
     # ==================== ДОЛЖНОСТИ ====================
     
@@ -555,10 +567,16 @@ class HRSystemApp:
     def load_positions(self):
         for item in self.positions_tree.get_children():
             self.positions_tree.delete(item)
-
-        rows = list_positions(self.db.cursor)
-
-        for row in rows:
+        
+        self.db.cursor.execute('''
+            SELECT p.position_id, p.position_name, p.base_salary,
+                   COUNT(e.employee_id) as emp_count
+            FROM Positions p
+            LEFT JOIN Employees e ON p.position_id = e.position_id
+            GROUP BY p.position_id
+        ''')
+        
+        for row in self.db.cursor.fetchall():
             self.positions_tree.insert('', END, values=row)
     
     def add_position(self):
@@ -576,18 +594,21 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите должность!")
             return
-
+        
         if messagebox.askyesno("Подтверждение", "Удалить выбранную должность?"):
             item = self.positions_tree.item(selected[0])
             pos_id = item['values'][0]
-
-            ok, msg = core_delete_position(self.db.cursor, self.db.conn, pos_id)
-
-            if ok:
-                messagebox.showinfo("Успех", msg)
-                self.show_positions()
-            else:
-                messagebox.showerror("Ошибка", msg)
+            
+            self.db.cursor.execute("SELECT COUNT(*) FROM Employees WHERE position_id = ?", (pos_id,))
+            if self.db.cursor.fetchone()[0] > 0:
+                messagebox.showerror("Ошибка", "На этой должности есть сотрудники!")
+                return
+            
+            self.db.cursor.execute("DELETE FROM Positions WHERE position_id = ?", (pos_id,))
+            self.db.conn.commit()
+            
+            messagebox.showinfo("Успех", "Должность удалена!")
+            self.show_positions()
     
     def position_window(self, mode):
         window = Toplevel(self.root)
@@ -620,19 +641,26 @@ class HRSystemApp:
         def save():
             name = name_entry.get()
             salary = salary_entry.get()
-
-            pos_id = None
-            if mode == 'edit':
-                pos_id = item['values'][0]
-
-            ok, msg = save_position(self.db.cursor, self.db.conn, name, salary, pos_id)
-
-            if ok:
-                messagebox.showinfo("Успех", msg)
+            
+            if not name or not salary:
+                messagebox.showerror("Ошибка", "Заполните все поля!")
+                return
+            
+            try:
+                if mode == 'add':
+                    self.db.cursor.execute("INSERT INTO Positions (position_name, base_salary) VALUES (?, ?)", 
+                                         (name, float(salary)))
+                else:
+                    pos_id = item['values'][0]
+                    self.db.cursor.execute("UPDATE Positions SET position_name=?, base_salary=? WHERE position_id=?", 
+                                         (name, float(salary), pos_id))
+                
+                self.db.conn.commit()
+                messagebox.showinfo("Успех", "Данные сохранены!")
                 window.destroy()
                 self.show_positions()
-            else:
-                messagebox.showerror("Ошибка", msg)
+            except Exception as e:
+                messagebox.showerror("Ошибка", str(e))
         
         Button(window, text="💾 СОХРАНИТЬ", command=save, bg='#27ae60', 
                fg='white', font=("Arial", 12, "bold"), width=15).pack(pady=20)
