@@ -9,6 +9,7 @@ nav:
   - Предметная область: domain.md
   - Архитектура: architecture.md
   - Команда: team.md
+  - Диаграммы: diagrams.md
 
 theme:
   name: mkdocs
