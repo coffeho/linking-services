@@ -30,6 +30,15 @@ from packages.core.vacations import (
     list_vacations,
     save_vacation,
 )
+
+
+from packages.core.transfers import (
+    create_transfer,
+    delete_transfer as core_delete_transfer,
+    list_departments_for_transfer,
+    list_transfers,
+    list_working_employees_with_department,
+)
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
 class HRSystemApp:
@@ -1360,21 +1369,8 @@ class HRSystemApp:
     def load_transfers(self):
         for item in self.transfers_tree.get_children():
             self.transfers_tree.delete(item)
-        
-        self.db.cursor.execute('''
-            SELECT t.transfer_id,
-                   e.last_name || ' ' || e.first_name as full_name,
-                   d1.department_name as old_dept,
-                   d2.department_name as new_dept,
-                   t.transfer_date
-            FROM Transfers t
-            JOIN Employees e ON t.employee_id = e.employee_id
-            JOIN Departments d1 ON t.old_department_id = d1.department_id
-            JOIN Departments d2 ON t.new_department_id = d2.department_id
-            ORDER BY t.transfer_date DESC
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_transfers(self.db.cursor):
             self.transfers_tree.insert('', END, values=row)
     
     def add_transfer(self):
@@ -1395,14 +1391,8 @@ class HRSystemApp:
         emp_var = StringVar()
         emp_combo = ttk.Combobox(form_frame, textvariable=emp_var, font=("Arial", 11), width=28)
         
-        self.db.cursor.execute('''
-            SELECT e.employee_id, 
-                   e.last_name || ' ' || e.first_name || ' (' || d.department_name || ')' 
-            FROM Employees e
-            JOIN Departments d ON e.department_id = d.department_id
-            WHERE e.status='Работает'
-        ''')
-        employees = self.db.cursor.fetchall()
+        employees = list_working_employees_with_department(self.db.cursor)
+
         emp_combo['values'] = [f"{e[0]} - {e[1]}" for e in employees]
         emp_combo.grid(row=0, column=1, pady=10)
         
@@ -1412,8 +1402,8 @@ class HRSystemApp:
         dept_var = StringVar()
         dept_combo = ttk.Combobox(form_frame, textvariable=dept_var, font=("Arial", 11), width=28)
         
-        self.db.cursor.execute("SELECT department_id, department_name FROM Departments")
-        departments = self.db.cursor.fetchall()
+        departments = list_departments_for_transfer(self.db.cursor)#!
+
         dept_combo['values'] = [f"{d[0]} - {d[1]}" for d in departments]
         dept_combo.grid(row=1, column=1, pady=10)
         
@@ -1431,29 +1421,20 @@ class HRSystemApp:
                 transfer_date = date_entry.get()
                 
                 # Получаем текущее подразделение
-                self.db.cursor.execute("SELECT department_id FROM Employees WHERE employee_id = ?", 
-                                      (emp_id,))
-                old_dept_id = self.db.cursor.fetchone()[0]
-                
-                if old_dept_id == new_dept_id:
-                    messagebox.showerror("Ошибка", "Сотрудник уже в этом подразделении!")
-                    return
-                
-                # Добавляем запись о переводе
-                self.db.cursor.execute('''
-                    INSERT INTO Transfers (employee_id, old_department_id, new_department_id, transfer_date)
-                    VALUES (?, ?, ?, ?)
-                ''', (emp_id, old_dept_id, new_dept_id, transfer_date))
-                
-                # Обновляем подразделение у сотрудника
-                self.db.cursor.execute('''
-                    UPDATE Employees SET department_id = ? WHERE employee_id = ?
-                ''', (new_dept_id, emp_id))
-                
-                self.db.conn.commit()
-                messagebox.showinfo("Успех", "Перевод выполнен!")
-                window.destroy()
-                self.show_transfers()
+                ok, msg = create_transfer(
+                    self.db.cursor,
+                    self.db.conn,
+                    emp_id,
+                    new_dept_id,
+                    transfer_date,
+                )
+
+                if ok:
+                    messagebox.showinfo("Успех", msg)
+                    window.destroy()
+                    self.show_transfers()
+                else:
+                    messagebox.showerror("Ошибка", msg)
             except Exception as e:
                 messagebox.showerror("Ошибка", str(e))
         
@@ -1465,16 +1446,18 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите перевод!")
             return
-        
+
         if messagebox.askyesno("Подтверждение", "Удалить выбранный перевод?"):
             item = self.transfers_tree.item(selected[0])
             transfer_id = item['values'][0]
-            
-            self.db.cursor.execute("DELETE FROM Transfers WHERE transfer_id = ?", (transfer_id,))
-            self.db.conn.commit()
-            
-            messagebox.showinfo("Успех", "Перевод удалён!")
-            self.show_transfers()
+
+            ok, msg = core_delete_transfer(self.db.cursor, self.db.conn, transfer_id)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
+                self.show_transfers()
+            else:
+                messagebox.showerror("Ошибка", msg)
     
     # ==================== ОТЧЁТЫ ====================
     
