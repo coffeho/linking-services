@@ -22,6 +22,14 @@ from packages.core.positions import (
     list_positions,
     save_position,
 )
+
+
+from packages.core.vacations import (
+    delete_vacation as core_delete_vacation,
+    list_active_employees_for_vacation,
+    list_vacations,
+    save_vacation,
+)
 # ======================== GUI ПРИЛОЖЕНИЕ ========================
 
 class HRSystemApp:
@@ -575,21 +583,18 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите должность!")
             return
-        
+
         if messagebox.askyesno("Подтверждение", "Удалить выбранную должность?"):
             item = self.positions_tree.item(selected[0])
             pos_id = item['values'][0]
-            
-            self.db.cursor.execute("SELECT COUNT(*) FROM Employees WHERE position_id = ?", (pos_id,))
-            if self.db.cursor.fetchone()[0] > 0:
-                messagebox.showerror("Ошибка", "На этой должности есть сотрудники!")
-                return
-            
-            self.db.cursor.execute("DELETE FROM Positions WHERE position_id = ?", (pos_id,))
-            self.db.conn.commit()
-            
-            messagebox.showinfo("Успех", "Должность удалена!")
-            self.show_positions()
+
+            ok, msg = core_delete_position(self.db.cursor, self.db.conn, pos_id)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
+                self.show_positions()
+            else:
+                messagebox.showerror("Ошибка", msg)
     
     def position_window(self, mode):
         window = Toplevel(self.root)
@@ -622,26 +627,19 @@ class HRSystemApp:
         def save():
             name = name_entry.get()
             salary = salary_entry.get()
-            
-            if not name or not salary:
-                messagebox.showerror("Ошибка", "Заполните все поля!")
-                return
-            
-            try:
-                if mode == 'add':
-                    self.db.cursor.execute("INSERT INTO Positions (position_name, base_salary) VALUES (?, ?)", 
-                                         (name, float(salary)))
-                else:
-                    pos_id = item['values'][0]
-                    self.db.cursor.execute("UPDATE Positions SET position_name=?, base_salary=? WHERE position_id=?", 
-                                         (name, float(salary), pos_id))
-                
-                self.db.conn.commit()
-                messagebox.showinfo("Успех", "Данные сохранены!")
+
+            pos_id = None
+            if mode == 'edit':
+                pos_id = item['values'][0]
+
+            ok, msg = save_position(self.db.cursor, self.db.conn, name, salary, pos_id)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
                 window.destroy()
                 self.show_positions()
-            except Exception as e:
-                messagebox.showerror("Ошибка", str(e))
+            else:
+                messagebox.showerror("Ошибка", msg)
         
         Button(window, text="💾 СОХРАНИТЬ", command=save, bg='#27ae60', 
                fg='white', font=("Arial", 12, "bold"), width=15).pack(pady=20)
@@ -685,18 +683,8 @@ class HRSystemApp:
     def load_vacations(self):
         for item in self.vacations_tree.get_children():
             self.vacations_tree.delete(item)
-        
-        self.db.cursor.execute('''
-            SELECT v.vacation_id, 
-                   e.last_name || ' ' || e.first_name as full_name,
-                   v.start_date, v.end_date, v.vacation_type,
-                   CAST((julianday(v.end_date) - julianday(v.start_date)) AS INTEGER) as days
-            FROM Vacations v
-            JOIN Employees e ON v.employee_id = e.employee_id
-            ORDER BY v.start_date DESC
-        ''')
-        
-        for row in self.db.cursor.fetchall():
+
+        for row in list_vacations(self.db.cursor):
             self.vacations_tree.insert('', END, values=row)
     
     def add_vacation(self):
@@ -714,16 +702,18 @@ class HRSystemApp:
         if not selected:
             messagebox.showwarning("Предупреждение", "Выберите отпуск!")
             return
-        
+
         if messagebox.askyesno("Подтверждение", "Удалить выбранный отпуск?"):
             item = self.vacations_tree.item(selected[0])
             vac_id = item['values'][0]
-            
-            self.db.cursor.execute("DELETE FROM Vacations WHERE vacation_id = ?", (vac_id,))
-            self.db.conn.commit()
-            
-            messagebox.showinfo("Успех", "Отпуск удалён!")
-            self.show_vacations()
+
+            ok, msg = core_delete_vacation(self.db.cursor, self.db.conn, vac_id)
+
+            if ok:
+                messagebox.showinfo("Успех", msg)
+                self.show_vacations()
+            else:
+                messagebox.showerror("Ошибка", msg)
     
     def vacation_window(self, mode):
         window = Toplevel(self.root)
@@ -743,11 +733,8 @@ class HRSystemApp:
         emp_var = StringVar()
         emp_combo = ttk.Combobox(form_frame, textvariable=emp_var, font=("Arial", 11), width=28)
         
-        self.db.cursor.execute('''
-            SELECT employee_id, last_name || ' ' || first_name || ' ' || middle_name 
-            FROM Employees WHERE status='Работает'
-        ''')
-        employees = self.db.cursor.fetchall()
+        employees = list_active_employees_for_vacation(self.db.cursor)
+
         emp_combo['values'] = [f"{e[0]} - {e[1]}" for e in employees]
         emp_combo.grid(row=0, column=1, pady=10)
         
@@ -793,23 +780,28 @@ class HRSystemApp:
                 start = start_entry.get()
                 end = end_entry.get()
                 vac_type = type_var.get()
-                
-                if mode == 'add':
-                    self.db.cursor.execute('''
-                        INSERT INTO Vacations (employee_id, start_date, end_date, vacation_type)
-                        VALUES (?, ?, ?, ?)
-                    ''', (emp_id, start, end, vac_type))
-                else:
+
+                vac_id = None
+                if mode == 'edit':
                     vac_id = item['values'][0]
-                    self.db.cursor.execute('''
-                        UPDATE Vacations SET employee_id=?, start_date=?, end_date=?, vacation_type=?
-                        WHERE vacation_id=?
-                    ''', (emp_id, start, end, vac_type, vac_id))
-                
-                self.db.conn.commit()
-                messagebox.showinfo("Успех", "Данные сохранены!")
-                window.destroy()
-                self.show_vacations()
+
+                ok, msg = save_vacation(
+                    self.db.cursor,
+                    self.db.conn,
+                    emp_id,
+                    start,
+                    end,
+                    vac_type,
+                    vac_id,
+                )
+
+                if ok:
+                    messagebox.showinfo("Успех", msg)
+                    window.destroy()
+                    self.show_vacations()
+                else:
+                    messagebox.showerror("Ошибка", msg)
+
             except Exception as e:
                 messagebox.showerror("Ошибка", str(e))
         
