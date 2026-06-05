@@ -160,8 +160,13 @@ make smoke-test
 ```bash
 make auth-test
 ```
-
 Запускает unit-тесты авторизации.
+
+```bash
+make integration-test
+```
+Запускает integration-тесты.
+
 
 ```bash
 make coverage
@@ -247,6 +252,7 @@ make docs
 ```bash
 make smoke-test
 make auth-test
+make integration-test
 python -m pytest tests/unit/test_models.py -v
 python -m pytest tests/unit/test_employees.py -v
 python -m pytest tests/unit/test_departments_positions.py -v
