@@ -1,7 +1,8 @@
-.PHONY: help setup run test smoke-test auth-test coverage docs build-lib install-lib-local check clean
+.PHONY: help setup run test smoke-test auth-test coverage docs build-lib install-lib-local check clean docker-build docker-check compose-check
 
 PYTHON ?= python
 
+help:
 help:
 	@echo "Доступные команды:"
 	@echo "  make setup       - установить зависимости для разработки"
@@ -10,11 +11,13 @@ help:
 	@echo "  make smoke-test  - запустить smoke-тесты"
 	@echo "  make auth-test   - запустить unit-тесты авторизации"
 	@echo "  make coverage    - запустить тесты с отчётом покрытия"
-	@echo "  make clean       - удалить временные файлы"
 	@echo "  make docs        - собрать проектную документацию"
 	@echo "  make build-lib   - собрать переиспользуемый core-пакет"
 	@echo "  make install-lib-local - установить пакет локально в editable-режиме"
 	@echo "  make check       - выполнить основную проверку проекта"
+	@echo "  make docker-build - собрать Docker-образ для проверки"
+	@echo "  make docker-check - запустить make check внутри Docker"
+	@echo "  make compose-check - запустить проверку через docker compose"
 
 setup:
 	./scripts/setup.sh
@@ -46,3 +49,11 @@ build-lib:
 install-lib-local:
 	./scripts/install-lib-local.sh
 check: test docs
+docker-build:
+	docker build -t hr-system-checks:local .
+
+docker-check:
+	docker run --rm hr-system-checks:local
+
+compose-check:
+	docker compose -f infra/compose.yaml up --build --abort-on-container-exit --exit-code-from checks

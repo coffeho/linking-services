@@ -40,9 +40,12 @@
 - `tests/unit/` — unit-тесты core-модулей;
 - `Makefile` и `scripts/` — единые команды для запуска и проверки проекта;
 - `docs/` — проектная документация;
-- `mkdocs.yml` — конфигурация сборки документации через MkDocs.
+- `mkdocs.yml` — конфигурация сборки документации через MkDocs;
+- `Dockerfile` и `infra/compose.yaml` — контейнерная проверка проекта.
 
 ## Системные зависимости
+
+Проект проверяется на Python 3.12.
 
 Для Linux/WSL может понадобиться установить Tkinter отдельно:
 
@@ -56,9 +59,17 @@ sudo apt install -y python3-tk
 sudo apt install -y python3.12-venv
 ```
 
-Проект проверяется на Python 3.12.
-Runtime-зависимости для обычного запуска описаны в `requirements.txt`.
-Dev-зависимости для тестов, покрытия, документации и сборки пакета описаны в `requirements-dev.txt`.
+Runtime-зависимости для обычного запуска описаны в:
+
+```text
+requirements.txt
+```
+
+Dev-зависимости для тестов, покрытия, документации и сборки пакета описаны в:
+
+```text
+requirements-dev.txt
+```
 
 ## Подготовка окружения
 
@@ -165,6 +176,42 @@ make docs
 Собирает проектную документацию через MkDocs.
 
 ```bash
+make build-lib
+```
+
+Собирает переиспользуемый core-компонент как Python-пакет.
+
+```bash
+make install-lib-local
+```
+
+Устанавливает проект локально в editable-режиме.
+
+```bash
+make check
+```
+
+Выполняет основную проверку проекта: тесты и сборку документации.
+
+```bash
+make docker-build
+```
+
+Собирает Docker-образ для проверки проекта.
+
+```bash
+make docker-check
+```
+
+Запускает проверку внутри Docker-контейнера.
+
+```bash
+make compose-check
+```
+
+Запускает проверку через Docker Compose.
+
+```bash
 make clean
 ```
 
@@ -178,16 +225,22 @@ make clean
 python3 -m venv .venv
 source .venv/bin/activate
 make setup
-make test
+make check
 ```
 
-Ожидаемый результат на текущем этапе:
+Команда `make check` выполняет:
+
+```bash
+make test
+make docs
+```
+
+Ожидаемый результат:
 
 ```text
-54 passed
+тесты проходят
+документация собирается
 ```
-
-Если количество тестов изменилось после новых PR, ориентируйтесь на фактический результат команды `make test`: все тесты должны проходить без ошибок.
 
 Также можно запускать отдельные группы тестов:
 
@@ -196,12 +249,33 @@ make smoke-test
 make auth-test
 python -m pytest tests/unit/test_models.py -v
 python -m pytest tests/unit/test_employees.py -v
-python -m pytest
-tests/unit/test_departments_positions.py -v
+python -m pytest tests/unit/test_departments_positions.py -v
 python -m pytest tests/unit/test_vacations.py -v
 python -m pytest tests/unit/test_transfers.py -v
 python -m pytest tests/unit/test_orders.py -v
 python -m pytest tests/unit/test_reports.py -v
+```
+
+## Контейнерная проверка
+
+Tkinter GUI требует графический интерфейс, поэтому контейнер используется для воспроизводимой проверки тестов и документации, а не для открытия окна приложения.
+
+Сборка Docker-образа:
+
+```bash
+make docker-build
+```
+
+Запуск проверки внутри контейнера:
+
+```bash
+make docker-check
+```
+
+Проверка через Docker Compose:
+
+```bash
+make compose-check
 ```
 
 ## Smoke-тесты
@@ -256,7 +330,9 @@ docs/
 - `docs/specification.md` — спецификация HR-системы;
 - `docs/domain.md` — описание предметной области;
 - `docs/architecture.md` — архитектурное описание;
-- `docs/team.md` — разделение обязанностей в команде.
+- `docs/team.md` — разделение обязанностей в команде;
+- `docs/diagrams.md` — страница с описанием диаграмм;
+- `docs/diagrams/` — редактируемые Mermaid-диаграммы.
 
 Документация собирается автоматически через MkDocs:
 
@@ -271,6 +347,38 @@ site/
 ```
 
 Папка `site/` является сгенерированным артефактом и не хранится в Git.
+
+## Сборка core-компонента
+
+Переиспользуемая логика находится в:
+
+```text
+packages/core/
+```
+
+Проект содержит `pyproject.toml`, поэтому core-компонент можно установить локально и собрать как Python-пакет.
+
+Локальная установка в editable-режиме:
+
+```bash
+make install-lib-local
+```
+
+Сборка пакета:
+
+```bash
+make build-lib
+```
+
+Сгенерированные артефакты сборки помещаются в:
+
+```text
+dist/
+build/
+*.egg-info/
+```
+
+Эти файлы не хранятся в Git.
 
 ## Текущая структура проекта
 
@@ -294,7 +402,8 @@ site/
 │       └── vacations.py
 ├── tests/
 │   ├── smoke/
-│   │   └── test_database_baseline.py
+│   │
+└── test_database_baseline.py
 │   └── unit/
 │       ├── test_auth.py
 │       ├── test_departments_positions.py
@@ -309,15 +418,33 @@ site/
 │   ├── specification.md
 │   ├── domain.md
 │   ├── architecture.md
-│   └── team.md
+│   ├── team.md
+│   ├── diagrams.md
+│   └── diagrams/
+│       ├── auth_sequence.mmd
+│       ├── context.mmd
+│       ├── order_execution_sequence.mmd
+│       └── use_cases.mmd
+├── infra/
+│   └── compose.yaml
 ├── scripts/
 │   ├── build-docs.sh
+│   ├── build-lib.sh
 │   ├── coverage.sh
+│   ├── docker-build.sh
+│   ├── docker-test.sh
+│   ├── install-lib-local.sh
 │   ├── run.sh
 │   ├── setup.sh
 │   └── test.sh
+├── .dockerignore
+├── .gitignore
+├── .python-version
+├── Dockerfile
 ├── Makefile
 ├── mkdocs.yml
+├── pyproject.toml
+├── requirements.txt
 ├── requirements-dev.txt
 └── README.md
 ```
@@ -349,6 +476,9 @@ site/
 19. Вынесены операции приказов в `packages/core/orders.py`.
 20. Вынесены операции отчетов в `packages/core/reports.py`.
 21. Tkinter-приложение вынесено в `app/ui/main_window.py`, а `main.py` оставлен как тонкая совместимая обертка.
+22. Добавлена пакетизация core-компонента через `pyproject.toml`.
+23. Добавлена контейнерная проверка проекта.
+24. Добавлены диаграммы проекта в редактируемом формате Mermaid.
 
 ## Ограничения текущей версии
 
@@ -359,15 +489,12 @@ site/
 - Tkinter-интерфейс уже вынесен в `app/ui/main_window.py`, но отдельные формы пока не разделены по файлам;
 - `main.py` оставлен как совместимая обертка для старого запуска и smoke-тестов;
 - `packages/core` содержит основную переиспользуемую логику, но слой хранения `storage.py` пока находится внутри core;
-- контейнеризация пока не добавлена;
-- диаграммы будут добавлены отдельным шагом позже;
-- core пока не оформлен как устанавливаемый Python-пакет через `pyproject.toml`.
+- контейнер используется для проверки тестов и документации, а не для запуска GUI;
+- integration-тесты пока не добавлены.
 
 Дальнейшие шаги:
 
 - разделить Tkinter-формы по файлам внутри `app/ui`;
-- добавить диаграммы в редактируемом формате;
-- добавить `pyproject.toml` и сборку core-компонента;
-- добавить `requirements.txt` и `.python-version`;
-- добавить контейнеризацию;
-- добавить integration-тесты.
+- добавить integration-тесты;
+- при необходимости вынести SQLite-слой из `packages/core/storage.py` в отдельный адаптер;
+- расширить контейнерное окружение при появлении внешней инфраструктуры.
