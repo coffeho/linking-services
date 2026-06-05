@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hr-system-core"
+version = "0.1.0"
+description = "Reusable core modules for the HR System educational project"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Ulyana Ishumbaeva" },
+    { name = "Oleg Ratovskiy" }
+]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["packages*"]
