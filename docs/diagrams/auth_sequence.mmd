@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor User as Пользователь
+    participant GUI as app/ui/main_window.py
+    participant Auth as packages/core/auth.py
+    participant DB as SQLite Users
+
+    User->>GUI: вводит логин и пароль
+    GUI->>Auth: authenticate_user(cursor, login, password)
+    Auth->>Auth: hash_password(password)
+    Auth->>DB: SELECT user_id, role, full_name, active
+
+    alt пользователь не найден
+        DB-->>Auth: None
+        Auth-->>GUI: None
+        GUI-->>User: показать ошибку входа
+    else пользователь найден, но неактивен
+        DB-->>Auth: user(active=0)
+        Auth-->>GUI: AuthenticatedUser(active=False)
+        GUI-->>User: показать ошибку "Аккаунт деактивирован"
+    else пользователь найден и активен
+        DB-->>Auth: user(active=1)
+        Auth-->>GUI: AuthenticatedUser
+        GUI-->>User: открыть главный экран
+    end

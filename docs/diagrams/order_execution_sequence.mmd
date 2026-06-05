@@ -1,0 +1,39 @@
+sequenceDiagram
+    actor User as HR-менеджер / Администратор
+    participant GUI as app/ui/main_window.py
+    participant Orders as packages/core/orders.py
+    participant DB as SQLite
+
+    User->>GUI: выбирает приказ и нажимает "Исполнить"
+    GUI->>Orders: execute_order(cursor, conn, order_id)
+    Orders->>DB: SELECT order_type, employee_id, order_date, order_data
+    Orders->>DB: SELECT status FROM Orders
+
+    alt приказ уже исполнен
+        DB-->>Orders: status = "Исполнен"
+        Orders-->>GUI: False, "Приказ уже исполнен!"
+        GUI-->>User: показать сообщение об ошибке
+    else приказ не найден
+        DB-->>Orders: None
+        Orders-->>GUI: False, "Приказ не найден"
+        GUI-->>User: показать сообщение об ошибке
+    else приказ можно исполнить
+        DB-->>Orders: данные приказа
+
+        alt тип приказа = "Увольнение"
+            Orders->>DB: UPDATE Employees SET status = "Уволен"
+            Orders->>DB: DELETE будущие отпуска сотрудника
+        else тип приказа = "Перевод"
+            Orders->>DB: INSERT INTO Transfers
+            Orders->>DB: UPDATE Employees SET department_id / position_id
+        else тип приказа = "Отпуск"
+            Orders->>DB: INSERT INTO Vacations
+            Orders->>DB: при необходимости UPDATE Employees SET status = "В отпуске"
+        else тип приказа = "Изменение оклада"
+            Orders->>DB: UPDATE Employees SET salary
+        end
+
+        Orders->>DB: UPDATE Orders SET status = "Исполнен"
+        Orders-->>GUI: True, "Приказ успешно исполнен"
+        GUI-->>User: показать сообщение об успехе
+    end

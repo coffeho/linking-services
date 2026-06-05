@@ -1,0 +1,44 @@
+flowchart LR
+    Admin["Администратор"]
+    HR["HR-менеджер"]
+    Accountant["Бухгалтер"]
+    EmployeeUser["Сотрудник"]
+
+    Login["Войти в систему"]
+    ViewEmployees["Просматривать сотрудников"]
+    ManageEmployees["Добавлять, изменять и удалять сотрудников"]
+    ManageDepartments["Управлять подразделениями"]
+    ManagePositions["Управлять должностями"]
+    ManageVacations["Оформлять отпуска"]
+    ManageOrders["Создавать и исполнять приказы"]
+    ManageTransfers["Оформлять переводы"]
+    ViewReports["Просматривать отчеты"]
+    ManageUsers["Управлять пользователями"]
+
+    Admin --> Login
+    Admin --> ViewEmployees
+    Admin --> ManageEmployees
+    Admin --> ManageDepartments
+    Admin --> ManagePositions
+    Admin --> ManageVacations
+    Admin --> ManageOrders
+    Admin --> ManageTransfers
+    Admin --> ViewReports
+    Admin --> ManageUsers
+
+    HR --> Login
+    HR --> ViewEmployees
+    HR --> ManageEmployees
+    HR --> ManageDepartments
+    HR --> ManagePositions
+    HR --> ManageVacations
+    HR --> ManageOrders
+    HR --> ManageTransfers
+    HR --> ViewReports
+
+    Accountant --> Login
+    Accountant --> ViewEmployees
+    Accountant --> ManagePositions
+    Accountant --> ViewReports
+
+    EmployeeUser --> Login
