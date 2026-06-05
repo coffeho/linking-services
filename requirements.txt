@@ -1,0 +1,6 @@
+# Runtime dependencies.
+# The application currently uses Python standard library modules:
+# sqlite3, hashlib, datetime, os, and tkinter.
+#
+# Tkinter is provided as a system package on Linux/WSL:
+# sudo apt install -y python3-tk
