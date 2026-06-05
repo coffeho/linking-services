@@ -1,0 +1,14 @@
+site_name: HR System
+site_description: Учебный проект системы кадрового учета
+docs_dir: docs
+site_dir: site
+
+nav:
+  - Главная: index.md
+  - Спецификация: specification.md
+  - Предметная область: domain.md
+  - Архитектура: architecture.md
+  - Команда: team.md
+
+theme:
+  name: mkdocs
